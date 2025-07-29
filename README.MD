@@ -12,7 +12,7 @@ Telegram бот для отслеживания проверок заданий 
 
 1. Клонируйте репозиторий:
 ```bash
-git clone https://github.com/ваш-логин/devman-checker-bot.git
+git clone hhttps://github.com/karaman56/BOT
 cd devman-checker-bot
 ```
 
