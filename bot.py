@@ -1,60 +1,87 @@
 import os
-import argparse
 import requests
 import time
+import argparse
+import logging
 from dotenv import load_dotenv
 
 
-load_dotenv()
-parser = argparse.ArgumentParser()
-parser.add_argument('--chat_id', help='Ваш Telegram Chat ID')
-args = parser.parse_args()
-
-
-DEVMAN_TOKEN = os.getenv('DEVMAN_TOKEN')
-TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
-TELEGRAM_CHAT_ID = args.chat_id or os.getenv('TELEGRAM_CHAT_ID')
-
-if not TELEGRAM_CHAT_ID:
-    print("Укажите Chat ID одним из способов:")
-    print("1. python bot.py --chat_id 123456789")
-    print("2. Добавьте TELEGRAM_CHAT_ID=123456789 в .env")
-    exit()
-
-def send_telegram(text):
-    requests.post(
-        f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
-        json={"chat_id": TELEGRAM_CHAT_ID, "text": text, "parse_mode": "HTML"}
+def setup_logging():
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(levelname)s - %(message)s',
+        handlers=[logging.StreamHandler()]
     )
+    return logging.getLogger(__name__)
 
-send_telegram("🔔 Бот запущен!")
-last_time = None
+logger = setup_logging()
 
-while True:
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--chat_id', required=True, help='Ваш Telegram Chat ID')
+    args = parser.parse_args()
+
     try:
-        response = requests.get(
-            "https://dvmn.org/api/long_polling/",
-            headers={"Authorization": f"Token {DEVMAN_TOKEN}"},
-            params={"timestamp": last_time} if last_time else {},
-            timeout=90
+        load_dotenv()
+        telegram_token = os.environ['TELEGRAM_TOKEN']
+        devman_token = os.environ['DEVMAN_TOKEN']
+    except KeyError as e:
+        logger.error(f"Не найдена переменная: {e.args[0]}")
+        return
+
+    try:
+        requests.post(
+            f"https://api.telegram.org/bot{telegram_token}/sendMessage",
+            json={
+                'chat_id': args.chat_id,
+                'text': "🤖 Бот запущен",
+                'parse_mode': 'HTML'
+            },
+            timeout=10
         )
-        data = response.json()
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Ошибка Telegram: {e}")
+        return
 
-        if data["status"] == "found":
-            lesson = data["new_attempts"][0]
-            message = f"""
-📌 <b>Новая проверка!</b>
-📚 Урок: {lesson['lesson_title']}
-{'❌ Есть замечания' if lesson['is_negative'] else '✅ Принято'}
-🔗 https://dvmn.org{lesson['lesson_url']}
-"""
-            send_telegram(message)
-            last_time = data["last_attempt_timestamp"]
-        else:
-            last_time = data["timestamp_to_request"]
+    last_timestamp = None
 
-    except requests.exceptions.ReadTimeout:
-        continue
-    except Exception as e:
-        print(f"Ошибка: {e}")
+    while True:
+        try:
+            response = requests.get(
+                "https://dvmn.org/api/long_polling/",
+                headers={"Authorization": f"Token {devman_token}"},
+                params={"timestamp": last_timestamp} if last_timestamp else {},
+                timeout=90
+            )
+            response.raise_for_status()
+            review_data = response.json()  # Переименовано в review_data
+
+            if review_data['status'] == 'found':
+                lesson = review_data['new_attempts'][0]
+                message = f"📝 {lesson['lesson_title']} - {'❌' if lesson['is_negative'] else '✅'}"
+                requests.post(
+                    f"https://api.telegram.org/bot{telegram_token}/sendMessage",
+                    json={
+                        'chat_id': args.chat_id,
+                        'text': message,
+                        'parse_mode': 'HTML'
+                    },
+                    timeout=10
+                )
+                last_timestamp = review_data['last_attempt_timestamp']
+            else:
+                last_timestamp = review_data['timestamp_to_request']
+
+        except requests.exceptions.ReadTimeout:
+            continue
+        except requests.exceptions.ConnectionError:
+            logger.warning("Нет интернета")
+            time.sleep(30)
+        except Exception as e:
+            logger.error(f"Ошибка: {e}")
+            time.sleep(30)
+
         time.sleep(5)
+
+if __name__ == '__main__':
+    main()
