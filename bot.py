@@ -14,9 +14,10 @@ def setup_logging():
     )
     return logging.getLogger(__name__)
 
-logger = setup_logging()
 
 def main():
+    logger = setup_logging()
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--chat_id', required=True, help='Ваш Telegram Chat ID')
     args = parser.parse_args()
@@ -54,7 +55,7 @@ def main():
                 timeout=90
             )
             response.raise_for_status()
-            review_data = response.json()  # Переименовано в review_data
+            review_data = response.json()
 
             if review_data['status'] == 'found':
                 lesson = review_data['new_attempts'][0]
@@ -82,6 +83,7 @@ def main():
             time.sleep(30)
 
         time.sleep(5)
+
 
 if __name__ == '__main__':
     main()
