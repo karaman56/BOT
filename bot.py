@@ -5,15 +5,14 @@ import logging
 from dotenv import load_dotenv
 
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(levelname)s - %(message)s',
-    handlers=[logging.StreamHandler()]
-)
-logger = logging.getLogger(__name__)
+
 
 
 def main():
+    logger = logging.getLogger(__name__)
+    logging.basicConfig(level=logging.ERROR)
+    logger.setLevel(logging.INFO)
+
     try:
         load_dotenv()
         telegram_token = os.environ['TELEGRAM_TOKEN']
